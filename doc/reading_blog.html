@@ -92,15 +92,22 @@
 <p>큰 그림은 이렇습니다. <strong>독서 에이전트는 그 첫 번째</strong>입니다.</p>
 <pre><code>Main Agent (오케스트레이터)
     │
-    ├── 📚 독서 Agent     ← Agent #1 (현재 구현)
-    │       ├── Recommender   ← 이번 주 책 추천
-    │       ├── Insight       ← 책 → 삶의 지혜 연결
-    │       ├── Memory        ← 독서 이력 분석
-    │       └── Trend         ← AI/기술 트렌드 연결
+    ├── 📚 독서 Agent          ← Agent #1 (현재 구현)
+    │       │
+    │       ├── Recommender    ← 이번 주 책 추천 (매주 월요일)
+    │       ├── Insight        ← 책 → 삶의 지혜 연결
+    │       ├── Memory         ← 독서 이력 분석
+    │       ├── Trend          ← AI/기술 트렌드 연결
+    │       │
+    │       └── 💬 북클럽 봇  ← 핵심: 책 완독 후 실시간 1:1 토론
+    │               ├── 완독 감지 (&quot;고래 읽었어&quot;)
+    │               ├── 다중 페르소나 토론 진행
+    │               ├── 토론 요약 → 파일 저장 + git commit
+    │               └── 7일 무완독 시 독촉 알림 발송
     │
-    ├── ⛳ 골프 Agent     ← Agent #2 (예정)
-    ├── 🤿 건강 Agent     ← Agent #3 (예정)
-    └── 💰 재테크 Agent   ← Agent #4 (예정)
+    ├── ⛳ 골프 Agent          ← Agent #2 (예정)
+    ├── 🤿 건강 Agent          ← Agent #3 (예정)
+    └── 💰 재테크 Agent        ← Agent #4 (예정)
 </code></pre>
 <p>삶의 여러 영역에 에이전트를 하나씩 붙여가는 방식입니다. 에이전트가 늘어날수록 Main Agent가 종합하는 주간 리포트도 풍부해집니다. 이 글에서 다루는 건 그 첫 번째 — 독서 에이전트입니다.</p>
 <p>각 Sub Agent는 <strong>JSON으로만 소통</strong>합니다. 자연어를 배제하면 파싱 오류가 사라지고, 에이전트 교체가 인터페이스 변경 없이 가능합니다.</p>
