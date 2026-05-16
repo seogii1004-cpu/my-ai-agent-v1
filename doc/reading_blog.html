@@ -72,9 +72,9 @@
   </style>
 </head>
 <body>
-<h1>Claude Code로 나만의 AI 독서 파트너를 만들었다</h1>
+<h1>Claude Code로 나만의 AI 개인 비서를 만들었다</h1>
 <blockquote>
-<p>혼자 책 읽고 싶지만 토론도 하고 싶은 I형 개발자의 AI Agent 구축기</p>
+<p>AI로 내 삶을 하나씩 개선해가는 과정 — 그 첫 번째, 독서 파트너</p>
 </blockquote>
 <hr>
 <h2>들어가며</h2>
@@ -88,9 +88,15 @@
 <hr>
 <h2>설계 철학: Agent Harness</h2>
 <p>이 프로젝트의 핵심 개념은 <strong>Agent Harness</strong>입니다.</p>
-<p>하나의 거대한 AI 프롬프트로 모든 걸 처리하는 대신, <strong>하나의 Main Agent가 여러 Sub Agent를 조율하는 구조</strong>입니다. Main Agent는 오케스트레이터 역할만 하고, 실제 일은 각자 전문화된 Sub Agent가 처리합니다.</p>
+<p>하나의 거대한 AI 프롬프트로 모든 걸 처리하는 대신, <strong>하나의 Main Agent가 여러 Sub Agent를 조율하는 구조</strong>입니다. 역할이 명확히 나뉩니다.</p>
+<ul>
+<li><strong>Main Agent</strong>: 각 Sub Agent를 호출하고, 돌아온 결과를 모아 종합 리포트를 만드는 오케스트레이터입니다. 독서나 골프 같은 도메인 지식은 없어도 됩니다. Sub Agent가 뭘 하는지 몰라도, JSON만 받아서 조립하면 됩니다.</li>
+<li><strong>Sub Agent</strong>: 특정 삶의 영역에 특화된 전문가입니다. 독서, 골프, 재테크 — 각자의 영역에서만 일하고, 결과를 JSON으로 돌려줍니다.</li>
+</ul>
+<p>Main Agent 입장에서는 Sub Agent가 추가되거나 교체돼도 동일한 방식으로 처리합니다. 그냥 JSON을 하나 더 받아서 조립하면 그만이니까요. 에이전트가 늘어날수록 주간 리포트는 자연스럽게 풍부해집니다.</p>
 <p>큰 그림은 이렇습니다. <strong>독서 에이전트는 그 첫 번째</strong>입니다.</p>
 <pre><code>Main Agent (오케스트레이터)
+    │  ← 각 Sub Agent의 결과를 수집해 주간 종합 리포트 생성
     │
     ├── 📚 독서 Agent          ← Agent #1 (현재 구현)
     │       │
@@ -106,10 +112,9 @@
     │               └── 7일 무완독 시 독촉 알림 발송
     │
     ├── ⛳ 골프 Agent          ← Agent #2 (예정)
-    ├── 🤿 건강 Agent          ← Agent #3 (예정)
+    ├── 🐕 애견 Agent          ← Agent #3 (예정)
     └── 💰 재테크 Agent        ← Agent #4 (예정)
 </code></pre>
-<p>삶의 여러 영역에 에이전트를 하나씩 붙여가는 방식입니다. 에이전트가 늘어날수록 Main Agent가 종합하는 주간 리포트도 풍부해집니다. 이 글에서 다루는 건 그 첫 번째 — 독서 에이전트입니다.</p>
 <p>각 Sub Agent는 <strong>JSON으로만 소통</strong>합니다. 자연어를 배제하면 파싱 오류가 사라지고, 에이전트 교체가 인터페이스 변경 없이 가능합니다.</p>
 <pre><code class="language-typescript">// types.ts — 에이전트 간 공유 계약
 export interface InsightOutput {
@@ -124,6 +129,7 @@ export interface InsightOutput {
 <p>이 구조가 왜 중요하냐면, <strong>하나의 에이전트를 개선해도 나머지에 영향을 주지 않기 때문</strong>입니다. Insight Agent의 프롬프트를 완전히 갈아엎어도 Main Agent는 그냥 같은 JSON을 받을 뿐입니다.</p>
 <hr>
 <h2>시스템 구성</h2>
+<p>처음엔 주간 추천 하나만 만들 생각이었는데, 실제로 써보면서 기능이 세 가지로 자연스럽게 늘어났습니다.</p>
 <h3>1. 주간 브리핑 (매주 월요일 08:00)</h3>
 <p>cron이 Main Agent를 실행합니다. Main Agent는 Recommender를 먼저 실행하고, 결과를 바탕으로 나머지 세 에이전트를 <strong>병렬로</strong> 실행합니다.</p>
 <pre><code class="language-typescript">// 순차 → 병렬로 바꾸는 것만으로 실행 시간 약 3배 단축
@@ -237,7 +243,7 @@ def5678 토론 요약: 채식주의자 (2026-05-10)
 <p>Claude Haiku가 관심사(골프, 프리다이빙, 명상 등)에 빗대어 매번 다르게 생성합니다.</p>
 <p><img src="images/nudge.jpg" alt="독서 독촉 알림 — 프리다이빙 비유"></p>
 <hr>
-<h2>AI 에이전트 개발에서 자주 하는 실수들</h2>
+<h2>만들면서 느낀 것들</h2>
 <p>이 프로젝트를 만들면서 겪은 시행착오입니다. AI를 처음 활용하는 개발자라면 비슷한 함정을 만날 가능성이 높습니다.</p>
 <h3>실수 1. 잘못된 컨텍스트를 주면 AI는 틀린 방향으로 열심히 일한다</h3>
 <p>Insight Agent가 책의 아이디어를 실생활에 연결하는 역할인데, <code>preferences.json</code>에 이렇게 정의했습니다:</p>
@@ -345,8 +351,8 @@ await axios.post(`${TELEGRAM_API}/bot${TOKEN}/sendMessage`, { ... });
 <td>라운드 기록 분석, 약점 패턴 감지, 주간 드릴 추천</td>
 </tr>
 <tr>
-<td>🤿 건강 Agent</td>
-<td>프리다이빙 훈련 사이클 설계, 컨디션 기반 조언</td>
+<td>🐕 애견 Agent</td>
+<td>건강 체크 루틴, 산책 기록, 케어 일정 알림</td>
 </tr>
 <tr>
 <td>💰 재테크 Agent</td>

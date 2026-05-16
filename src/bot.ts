@@ -2,6 +2,7 @@ import "dotenv/config";
 import Anthropic from "@anthropic-ai/sdk";
 import axios from "axios";
 import { ConversationManager } from "./discussion/conversation-manager";
+import { saveCurrentlyReading } from "./memory/memory-manager";
 
 const TELEGRAM_API = "https://api.telegram.org";
 const TOKEN = process.env.TELEGRAM_BOT_TOKEN!;
@@ -9,6 +10,7 @@ const ALLOWED_CHAT_ID = process.env.TELEGRAM_CHAT_ID!;
 
 const FINISH_TRIGGERS = ["다 읽었어", "완독했어", "읽었어", "읽었다", "끝냈어", "다 봤어", "완독"];
 const END_TRIGGERS = ["토론 끝", "토론끝", "그만할게", "끝낼게", "그만", "/end", "/stop"];
+const START_TRIGGERS = ["읽기 시작", "읽는 중", "읽고 있어", "읽고 있는", "시작했어", "시작할게", "/start"];
 
 interface TelegramUpdate {
   update_id: number;
@@ -20,6 +22,7 @@ interface TelegramUpdate {
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const manager = new ConversationManager(client);
+let waitingForStartBook = false;
 
 async function send(text: string): Promise<void> {
   await axios.post(
@@ -38,9 +41,21 @@ function detectEnd(text: string): boolean {
   return END_TRIGGERS.some((t) => normalized.includes(t));
 }
 
+function detectStart(text: string): boolean {
+  return START_TRIGGERS.some((t) => text.includes(t));
+}
+
 function extractBook(text: string): string {
   let cleaned = text;
   for (const trigger of [...FINISH_TRIGGERS].sort((a, b) => b.length - a.length)) {
+    cleaned = cleaned.replace(new RegExp(trigger, "g"), "");
+  }
+  return cleaned.replace(/[!?.,~:]/g, "").trim();
+}
+
+function extractStartBook(text: string): string {
+  let cleaned = text;
+  for (const trigger of [...START_TRIGGERS].sort((a, b) => b.length - a.length)) {
     cleaned = cleaned.replace(new RegExp(trigger, "g"), "");
   }
   return cleaned.replace(/[!?.,~:]/g, "").trim();
@@ -60,7 +75,31 @@ async function handleMessage(text: string): Promise<void> {
       return;
     }
 
-    // 2. 책 이름 대기 중 (이전에 책 이름을 못 받았을 때)
+    // 2. 책 시작 이름 대기 중
+    if (waitingForStartBook) {
+      const bookName = text.replace(/[!?.,~:]/g, "").trim();
+      if (bookName) {
+        waitingForStartBook = false;
+        saveCurrentlyReading(bookName);
+        await send(`📖 *${bookName}* 시작! 다 읽으면 알려주세요 😊`);
+      }
+      return;
+    }
+
+    // 3. 책 시작 감지
+    if (detectStart(text)) {
+      const bookName = extractStartBook(text);
+      if (!bookName) {
+        waitingForStartBook = true;
+        await send("어떤 책 읽기 시작하셨나요? 제목을 알려주세요 📖");
+        return;
+      }
+      saveCurrentlyReading(bookName);
+      await send(`📖 *${bookName}* 시작! 다 읽으면 알려주세요 😊`);
+      return;
+    }
+
+    // 4. 책 이름 대기 중 (완독 후 제목을 못 받았을 때)
     if (manager.waitingForBook) {
       const bookName = text.replace(/[!?.,~:]/g, "").trim();
       if (bookName) {
@@ -71,7 +110,7 @@ async function handleMessage(text: string): Promise<void> {
       return;
     }
 
-    // 3. 완독 감지
+    // 5. 완독 감지
     if (detectFinish(text)) {
       const bookName = extractBook(text);
       if (!bookName) {
@@ -85,17 +124,19 @@ async function handleMessage(text: string): Promise<void> {
       return;
     }
 
-    // 4. 토론 진행 중
+    // 6. 토론 진행 중
     if (manager.hasActiveSession()) {
       const reply = await manager.reply(text);
       await send(reply);
       return;
     }
 
-    // 5. 도움말
+    // 7. 도움말
     await send(
       "📚 *북클럽 AI*\n\n" +
-        "책을 다 읽으면:\n" +
+        "책 시작:\n" +
+        "→ _\"[책 제목] 읽기 시작했어\"_ 또는 _\"/start\"_\n\n" +
+        "책 완독:\n" +
         "→ _\"[책 제목] 읽었어\"_ 또는 _\"다 읽었어 [책 제목]\"_\n\n" +
         "토론 종료:\n" +
         '→ _"토론 끝"_ 또는 _"/end"_'

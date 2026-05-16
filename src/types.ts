@@ -7,6 +7,11 @@ export interface BookRecord {
   key_insights: string[];
 }
 
+export interface CurrentlyReading {
+  book: string;
+  startedAt: string;
+}
+
 export interface Preferences {
   hobbies: string[];
   reading_interests: string[];

@@ -1,0 +1,64 @@
+# Dependencies
+node_modules
+vendor
+
+# Build outputs
+dist
+build
+out
+coverage
+.next
+.nuxt
+
+# Logs
+*.log
+logs
+
+# Lock files
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Generated
+*.generated.*
+*.gen.*
+
+# Binary / large assets
+*.zip
+*.tar
+*.gz
+*.mp4
+*.mov
+*.png
+*.jpg
+*.jpeg
+*.webp
+*.pdf
+
+# Cache
+.cache
+.tmp
+.temp
+
+# IDE
+.vscode
+.idea
+
+# Git
+.git
+
+# Environment
+.env
+.env.*
+
+# Python
+__pycache__
+.pytest_cache
+
+# Android/iOS
+.gradle
+Pods
+
+# Misc
+tmp
+temp

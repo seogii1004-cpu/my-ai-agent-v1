@@ -1,6 +1,6 @@
 import fs from "fs";
 import path from "path";
-import { BookRecord, Preferences } from "../types";
+import { BookRecord, CurrentlyReading, Preferences } from "../types";
 
 const MEMORY_DIR = path.join(__dirname, "../../memory");
 
@@ -34,4 +34,16 @@ export function addBookToHistory(book: BookRecord): void {
   const history = loadReadingHistory();
   history.push(book);
   saveReadingHistory(history);
+}
+
+export function saveCurrentlyReading(book: string): void {
+  const filePath = path.join(MEMORY_DIR, "currently-reading.json");
+  const data: CurrentlyReading = { book, startedAt: new Date().toISOString() };
+  fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
+}
+
+export function loadCurrentlyReading(): CurrentlyReading | null {
+  const filePath = path.join(MEMORY_DIR, "currently-reading.json");
+  if (!fs.existsSync(filePath)) return null;
+  return JSON.parse(fs.readFileSync(filePath, "utf-8"));
 }
