@@ -88,6 +88,8 @@ const [insights, memory, trends] = await Promise.all([
 
 텔레그램으로 브리핑이 도착합니다:
 
+![주간 브리핑 텔레그램 메시지](images/briefing.jpg)
+
 ```
 📚 이번 주 독서 브리핑 — 2026-05-19
 
@@ -126,6 +128,8 @@ const [insights, memory, trends] = await Promise.all([
 ```
 
 대화를 주고받습니다. Claude는 소크라테스식으로, 바로 동의하지 않고 계속 질문을 던집니다.
+
+![고래 토론 실제 대화](images/discussion.jpg)
 
 ```
 나:  "욕망을 억압한 세계를 고발하는 것 같아.
@@ -166,6 +170,8 @@ def5678 토론 요약: 채식주의자 (2026-05-10)
 ```
 
 Claude Haiku가 관심사(골프, 프리다이빙, 명상 등)에 빗대어 매번 다르게 생성합니다.
+
+![독서 독촉 알림 — 프리다이빙 비유](images/nudge.jpg)
 
 ---
 
