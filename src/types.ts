@@ -8,10 +8,12 @@ export interface BookRecord {
 }
 
 export interface Preferences {
-  interests: string[];
-  favorite_genres: string[];
+  hobbies: string[];
+  reading_interests: string[];
   reading_goals: string[];
-  life_domains: string[];
+  favorite_genres: string[];
+  profession: string;
+  professional_interests: string[];
 }
 
 export interface Recommendation {

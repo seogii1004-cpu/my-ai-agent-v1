@@ -24,9 +24,10 @@ export async function runRecommender(
 ): Promise<RecommenderOutput> {
   const recentBooks = history.slice(-5).map((b) => b.book);
   const input = {
-    interests: prefs.interests,
+    reading_interests: prefs.reading_interests,
     favorite_genres: prefs.favorite_genres,
     reading_goals: prefs.reading_goals,
+    professional_interests: prefs.professional_interests,
     recent_books: recentBooks,
   };
 

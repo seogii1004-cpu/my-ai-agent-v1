@@ -35,7 +35,7 @@ export async function runMainAgent(client: Anthropic): Promise<WeeklyBriefing> {
   const [insights, memory, trends] = await Promise.all([
     runInsight(client, topRec.title, topRec.author, prefs),
     runMemory(client, history),
-    runTrend(client, topRec.title, topRec.author, prefs.interests),
+    runTrend(client, topRec.title, topRec.author, prefs.professional_interests),
   ]);
   console.log("[main-agent] All sub-agents completed.");
 
@@ -52,7 +52,7 @@ export async function runMainAgent(client: Anthropic): Promise<WeeklyBriefing> {
 Date: ${today}
 Top recommendation: "${topRec.title}" by ${topRec.author}
 Reason: ${topRec.reason}
-User interests: ${prefs.interests.join(", ")}`,
+User reading interests: ${prefs.reading_interests.join(", ")}`,
       },
     ],
   });
