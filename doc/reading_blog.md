@@ -1,473 +1,294 @@
-# 나만의 AI 독서 에이전트 만들기 — 일주일에 한 권, AI가 추천하다
+# Claude Code로 나만의 AI 독서 파트너를 만들었다
 
-> Claude Code와 Anthropic SDK로 만드는 개인 지식 성장 시스템 구축기
+> 혼자 책 읽고 싶지만 토론도 하고 싶은 I형 개발자의 AI Agent 구축기
 
 ---
 
 ## 들어가며
 
-책을 좋아하지만 다음에 무엇을 읽을지 고민하는 시간이 아깝다고 느낀 적 있으신가요?  
-저는 그 고민을 AI에게 넘기기로 했습니다.
+저는 MBTI가 I형입니다.
 
-단순한 책 추천 앱이 아닙니다. 제 관심사와 독서 이력을 기억하고, 매주 월요일 아침 텔레그램으로 이번 주의 독서 브리핑을 보내주는 **나만의 AI 독서 동반자**를 만들었습니다.
+독서를 정말 좋아하는데, 읽고 나서 항상 아쉬운 게 있었습니다. **누군가와 이야기하고 싶다는 것**. 책이 던지는 질문을 혼자 삭이기엔 너무 아깝고, 그렇다고 북클럽에 참여하거나 독서 모임을 찾아가는 건 — I형인 저에게는 생각만 해도 에너지가 먼저 소진됩니다. 시간, 장소, 함께할 사람. 니즈는 늘 있었지만 기회는 항상 없었습니다.
 
-이 글은 그 과정을 처음부터 끝까지 기록한 개발 일지입니다.
+그러던 중 문득 이런 생각이 들었습니다.
 
----
+> *"AI가 내 독서 파트너가 되면 어떨까? 언제든, 어디서든, 피곤하지 않게."*
 
-## 왜 만들었는가
-
-독서는 좋은데, 다음 책을 고르는 일은 의외로 에너지가 많이 드는 결정이었습니다.  
-베스트셀러 목록을 뒤적이다 결국 예전에 읽은 것과 비슷한 책을 고르거나,  
-아예 선택 피로로 읽기를 미루는 경우도 많았습니다.
-
-그래서 떠올린 아이디어:
-
-> **"내 관심사를 알고, 독서 이력을 기억하며, 매일 아침 최적의 책을 추천해주는 AI가 있다면?"**
-
-단순 추천을 넘어, 책의 아이디어를 실생활과 연결하고, 지적 토론 질문까지 던져주는 시스템. 이것이 이 프로젝트의 출발점이었습니다.
+SW 엔지니어라는 직업 덕분에 그 생각을 바로 코드로 옮길 수 있었습니다. 그리고 그 과정에서 Claude Code라는 도구를 적극 활용했습니다. 이 글은 그 구축 과정을 동료 개발자들과 나누기 위해 씁니다. **AI를 이렇게도 쓸 수 있다**는 걸 보여드리고 싶어서요.
 
 ---
 
-## 시스템 설계
+## 도구: Claude Code란?
 
-처음부터 거대하게 만들려 하지 않았습니다. MVP 원칙 — 가장 작은 단위로 동작하는 것부터.
+Claude Code는 Anthropic이 만든 **CLI 기반 AI 코딩 도구**입니다. IDE 플러그인이 아닌 터미널에서 돌아가며, 단순한 코드 자동완성을 넘어 **대화하면서 함께 시스템을 설계하고 구현**할 수 있습니다.
 
-### 전체 아키텍처
+이 프로젝트에서 Claude Code는 단순한 코파일럿이 아니었습니다. 아이디어 → 설계 → 구현 → 디버깅 → 리팩토링까지 전 과정을 같이 했습니다. 코드를 받아쓰는 게 아니라, **무엇을 만들지 대화로 정의하고, Claude Code가 그걸 코드로 구현하는 방식**으로 진행했습니다.
 
-```
-Morning Scheduler (cron)
-        ↓
-  Main Reading Agent        ← 오케스트레이터
-        ↓
-  Recommender Agent         ← 책 추천 서브 에이전트
-        ↓
-  Daily Briefing 생성
-        ↓
-  Telegram 전송
+```bash
+# 실제로 이런 식으로 대화하며 개발했습니다
+"Discussion은 주간 브리핑에 포함하는 게 아니라
+ 책 다 읽었을 때 실시간 대화로 시작되면 좋겠어.
+ 텔레그램에서 메시지 주고받는 방식으로."
+
+→ Claude Code가 ConversationManager 설계부터 bot.ts 구현까지 진행
 ```
 
-### 에이전트 역할 분리
+---
 
-| 에이전트 | 역할 | 모델 |
-|---|---|---|
-| Main Agent | 오케스트레이션, 브리핑 생성 | claude-sonnet-4-6 |
-| Recommender Agent | 관심사 기반 책 추천 | claude-haiku-4-5 |
+## 설계 철학: Agent Harness
 
-메인 에이전트는 오케스트레이터로서 서브 에이전트를 호출하고 결과를 종합합니다.  
-서브 에이전트는 각자의 역할에 집중하며 JSON으로만 소통합니다.
+이 프로젝트의 핵심 개념은 **Agent Harness**입니다.
 
-### 프로젝트 구조
+하나의 거대한 AI 프롬프트로 모든 걸 처리하는 대신, **역할이 명확히 분리된 여러 에이전트를 Main Agent가 조율하는 구조**입니다.
+
+```
+Main Agent (오케스트레이터 - claude-sonnet-4-6)
+    │
+    ├── Recommender Agent    ← 이번 주 책 추천
+    ├── Insight Agent        ← 책 → 삶의 지혜 연결
+    ├── Memory Agent         ← 독서 이력 분석
+    └── Trend Agent          ← AI/기술 트렌드 연결
+
++ 독립 실행
+    └── 북클럽 봇 (24시간)  ← 실시간 독서 토론
+```
+
+각 에이전트는 **JSON으로만 소통**합니다. 자연어를 배제하면 파싱 오류가 사라지고, 에이전트 교체가 인터페이스 변경 없이 가능합니다.
+
+```typescript
+// types.ts — 에이전트 간 공유 계약
+export interface InsightOutput {
+  book: string;
+  insights: Array<{
+    domain: string;       // "삶의 지혜" | "경제/재테크" | "AI/기술" | ...
+    application: string;  // 이 책의 아이디어가 이 영역에서 의미하는 것
+    action: string;       // 이번 주 실제로 해볼 것
+  }>;
+}
+```
+
+이 구조가 왜 중요하냐면, **하나의 에이전트를 개선해도 나머지에 영향을 주지 않기 때문**입니다. Insight Agent의 프롬프트를 완전히 갈아엎어도 Main Agent는 그냥 같은 JSON을 받을 뿐입니다.
+
+---
+
+## 시스템 구성
+
+### 1. 주간 브리핑 (매주 월요일 08:00)
+
+cron이 Main Agent를 실행합니다. Main Agent는 Recommender를 먼저 실행하고, 결과를 바탕으로 나머지 세 에이전트를 **병렬로** 실행합니다.
+
+```typescript
+// 순차 → 병렬로 바꾸는 것만으로 실행 시간 약 3배 단축
+const [insights, memory, trends] = await Promise.all([
+  runInsight(client, topRec.title, topRec.author, prefs),
+  runMemory(client, history),
+  runTrend(client, topRec.title, topRec.author, prefs.professional_interests),
+]);
+```
+
+텔레그램으로 브리핑이 도착합니다:
+
+```
+📚 이번 주 독서 브리핑 — 2026-05-19
+
+📖 이번 주 추천
+『사피엔스』 — 유발 하라리
+→ 인지혁명과 AI 시대의 평행성 — 인간이 새로운 '허구'를 만드는 방식이 LLM 정렬 문제와 맞닿아 있음
+
+💡 인사이트
+[삶의 지혜] 집단적 믿음이 현실을 만든다는 통찰 → 팀 문화를 설계할 때 공유 내러티브의 힘을 의도적으로 활용해볼 것
+[AI/기술]  인지혁명 = 언어로 허구를 공유하는 능력 → LLM이 '의미'를 다루는 방식과 동일한 메커니즘
+
+📊 독서 이력 분석
+최근 변화: 자기계발 중심에서 사회과학·철학으로 이동 중
+지적 진화: 개인의 심리 → 집단의 작동 원리로 관심이 확장되고 있음
+```
+
+### 2. 북클럽 AI 봇 (24시간 상시 대기)
+
+이게 이 프로젝트의 핵심입니다.
+
+책을 다 읽으면 텔레그램에 그냥 보내면 됩니다.
+
+```
+나:  "고래 읽었어"
+```
+
+봇이 자동으로 감지하고 토론을 시작합니다.
+
+```
+봇:  📚 고래 완독 축하드려요!
+
+     천명관의 고래는 욕망을 솔직하게 드러내는 인물들이 가득한데,
+     그 욕망이 '나쁜 것'이 아니라 그냥 '인간적인 것'으로 그려지죠.
+     그렇다면 질문: 욕망을 억누르는 삶과 욕망에 충실한 삶 —
+     당신은 어느 쪽이 더 진실하다고 생각하나요?
+```
+
+대화를 주고받습니다. Claude는 소크라테스식으로, 바로 동의하지 않고 계속 질문을 던집니다.
+
+```
+나:  "욕망을 억압한 세계를 고발하는 것 같아.
+     다들 자기에 충실하지만 비극적인 결과를 낳잖아."
+
+봇:  흥미로운 해석인데, 한 발 더 나아가볼게요.
+     비극이 '욕망 때문'인지 '충분히 욕망하지 못했기 때문'인지 —
+     둘의 차이를 어떻게 구분하시겠어요?
+     그리고 소설 속 누구의 욕망이 가장 순수하다고 느끼셨나요?
+
+나:  "토론 끝"
+
+봇:  📝 토론 요약
+     ⚔️ 핵심 쟁점: 욕망의 정당성과 그 결과의 책임
+     💭 당신의 입장: 사회적 억압이 비극의 원인
+     💡 새로운 시각: 욕망과 책임은 분리 불가능하다
+     📚 다음 추천: 『채식주의자』— 한강 (억압과 해방의 또 다른 언어)
+```
+
+토론이 끝나면 요약이 자동으로 **파일로 저장되고 git commit**됩니다.
+
+```bash
+$ git log --oneline
+abc1234 토론 요약: 고래 (2026-05-17)
+def5678 토론 요약: 채식주의자 (2026-05-10)
+```
+
+`discussions/2026-05-17_고래.md` 파일이 생기고, 나중에 꺼내볼 수 있습니다.
+
+### 3. 독서 독촉 알림 (매일 09:00 체크)
+
+완독 후 7일이 지나도록 새 책을 시작하지 않으면 알림이 옵니다.
+
+```
+봇:  🏌️ 골프에서 연습을 멈추면 느는 건 잡생각뿐이에요.
+     독서도 마찬가지입니다. 마지막 완독이 15일 전이네요.
+     다음 책, 슬슬 펴볼까요?
+```
+
+Claude Haiku가 관심사(골프, 프리다이빙, 명상 등)에 빗대어 매번 다르게 생성합니다.
+
+---
+
+## 구현 과정에서 배운 것들
+
+### 트러블슈팅: WSL 네트워크 문제
+
+가장 시간을 많이 쓴 부분이 여기입니다.
+
+봇이 텔레그램 메시지를 **받는** 건 됐는데, **보내는** 건 ETIMEDOUT으로 계속 실패했습니다.
+
+```
+[bot] 수신: "고래 읽었어"
+[bot] 오류: [TypeError: fetch failed] { code: 'ETIMEDOUT' }
+```
+
+curl로 테스트하면 잘 되고, Node.js를 직접 실행해도 잘 됩니다. pm2로 띄웠을 때만 안 됩니다.
+
+원인: WSL2의 IPv6/IPv4 DNS 처리 순서 이슈. Node.js 내장 fetch가 IPv6를 먼저 시도하다 타임아웃.
+
+```bash
+# pm2에 플래그 추가
+pm2 start dist/bot.js --node-args="--dns-result-order=ipv4first"
+
+# + Telegram 호출을 fetch → axios로 교체
+```
+
+이런 환경 이슈는 Google 검색으로 답이 잘 안 나옵니다. Claude Code에 현상을 설명하고 같이 원인을 좁혀가면서 해결했습니다.
+
+### 설계 실수: Insight Agent
+
+초기 설계에서 Insight Agent는 책의 아이디어를 **골프, 프리다이빙, 강아지 키우기, 데일리 코디**에 연결했습니다.
+
+```
+[골프] 카너먼의 시스템1/2 이론 → 티샷 전 3초 멈추기
+[프리다이빙] 최악의 시나리오 심리 시뮬레이션
+```
+
+실제로 써보니 어색했습니다. 그것들은 그냥 취미고, 독서는 전혀 다른 목적으로 하고 있었으니까요.
+
+독서의 실제 목적을 다시 정의했습니다: **삶의 지혜, 경제/재테크, 명상, AI/기술**. 에이전트 프롬프트를 바꾸고 `preferences.json`을 업데이트했습니다. 변경 범위가 Insight Agent 하나로 제한되는 게 Agent Harness 설계의 장점입니다.
+
+### 모델 선택 원칙
+
+비용과 품질의 균형입니다.
+
+| 역할 | 모델 | 이유 |
+|------|------|------|
+| 오케스트레이터, 토론 | claude-sonnet-4-6 | 풍부한 맥락 이해, 한국어 품질 |
+| 추천, 인사이트, 트렌드 | claude-haiku-4-5 | 빠름, 구조화 작업에 충분 |
+
+추천 결과나 JSON 변환처럼 형식이 정해진 작업은 Haiku로 충분합니다. 실제로 대화하는 토론 봇만 Sonnet을 씁니다.
+
+---
+
+## 프로젝트 구조
 
 ```
 my-ai-agent-v1/
 ├── src/
 │   ├── agents/
-│   │   ├── main-agent.ts        ← 메인 오케스트레이터
-│   │   └── recommender-agent.ts ← 독서 추천 서브 에이전트
+│   │   ├── main-agent.ts          ← 주간 브리핑 오케스트레이터
+│   │   ├── recommender-agent.ts   ← 책 추천
+│   │   ├── insight-agent.ts       ← 삶의 지혜 연결
+│   │   ├── memory-agent.ts        ← 독서 이력 분석
+│   │   └── trend-agent.ts         ← AI/기술 트렌드 연결
+│   ├── discussion/
+│   │   ├── conversation-manager.ts ← 토론 세션 관리
+│   │   └── summary-store.ts        ← 요약 저장 + git commit
 │   ├── memory/
-│   │   └── memory-manager.ts    ← 독서 이력 관리
-│   ├── utils/
-│   │   └── telegram.ts          ← 텔레그램 알림
-│   ├── types.ts
-│   └── index.ts
+│   │   └── memory-manager.ts       ← JSON 기반 메모리
+│   ├── bot.ts                      ← 텔레그램 봇 (24시간)
+│   ├── nudge.ts                    ← 독서 독촉 알림
+│   └── index.ts                    ← 주간 브리핑 엔트리
 ├── memory/
-│   ├── reading-history.json     ← 독서 이력 저장소
-│   └── preferences.json         ← 사용자 관심사
+│   ├── reading-history.json        ← 84권 독서 이력
+│   ├── preferences.json            ← 관심사, 독서 목표
+│   └── last-read.json              ← 마지막 완독일
+├── discussions/                    ← 토론 요약 마크다운 저장소
 └── doc/
-    └── reading_blog.md          ← 이 글
+    └── reading_blog.md             ← 이 글
 ```
 
 ---
 
-## 기술 스택 선택
+## 앞으로: 더 많은 에이전트들
 
-- **Language**: TypeScript + Node.js — 타입 안정성과 생태계
-- **AI**: Anthropic SDK (`@anthropic-ai/sdk`) — Claude 모델 직접 호출
-- **Notification**: Telegram Bot API — 개인용으로 설정이 가장 간단
-- **Memory**: JSON 파일 — Phase 1에서는 단순하게, 나중에 DB로 확장
-- **Scheduler**: cron (WSL Ubuntu) — 매일 정해진 시간 자동 실행
-
----
-
-## 구현 과정
-
-### Step 1 — 프로젝트 초기화
-
-TypeScript 프로젝트를 세팅하고 Anthropic SDK를 설치했습니다.
-
-```bash
-npm init -y
-npm install @anthropic-ai/sdk dotenv
-npm install -D typescript ts-node @types/node
-```
-
-환경 변수는 `.env` 파일로 관리합니다.
+지금 만든 건 **독서 에이전트**입니다. 하지만 이 Harness 구조는 어떤 도메인에도 적용할 수 있습니다.
 
 ```
-ANTHROPIC_API_KEY=sk-ant-...
-TELEGRAM_BOT_TOKEN=...
-TELEGRAM_CHAT_ID=...
+Main Agent
+    │
+    ├── 독서 Agent (✅ 완성)
+    │       └── 주간 추천 + 실시간 토론 + 독촉 알림
+    │
+    ├── 골프 Agent (예정)
+    │       └── 라운드 기록 분석 + 약점 드릴 추천
+    │
+    ├── 건강 Agent (예정)
+    │       └── 프리다이빙 훈련 사이클 + 컨디션 관리
+    │
+    └── 재테크 Agent (예정)
+            └── 시장 뉴스 요약 + 포트폴리오 점검 알림
 ```
 
-### Step 2 — 에이전트 간 통신 규칙 정의
-
-에이전트끼리는 자연어가 아닌 **JSON으로만 소통**합니다.  
-이 원칙은 토큰 낭비를 줄이고, 파싱 오류를 최소화합니다.
-
-```typescript
-// types.ts — 공유 데이터 모델
-export interface Recommendation {
-  title: string;
-  author: string;
-  reason: string;
-  score: number;
-}
-
-export interface DailyBriefing {
-  date: string;
-  daily_briefing: string[];
-  today_recommendation: { book: string; author: string; reason: string };
-  discussion_prompt: string;
-  action_items: string[];
-}
-```
-
-### Step 3 — Recommender Agent 구현
-
-관심사와 최근 독서 이력을 입력받아 책 3권을 추천합니다.  
-Haiku 모델을 사용해 속도와 비용을 최적화했습니다.
-
-```typescript
-// recommender-agent.ts (핵심 부분)
-const message = await client.messages.create({
-  model: "claude-haiku-4-5-20251001",
-  max_tokens: 512,
-  system: `You are a book recommender. Respond ONLY with valid JSON, no markdown.`,
-  messages: [{ role: "user", content: `Recommend books based on: ${JSON.stringify(input)}` }],
-});
-```
-
-**트러블슈팅**: 모델이 JSON을 마크다운 코드블록으로 감싸서 반환하는 문제가 있었습니다.  
-간단한 정규식으로 해결했습니다.
-
-```typescript
-const cleaned = text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
-return JSON.parse(cleaned);
-```
-
-### Step 4 — Main Agent 구현
-
-Recommender Agent 결과를 받아 한국어 일일 브리핑을 생성합니다.  
-Sonnet 모델로 더 풍부한 인사이트를 만듭니다.
-
-```typescript
-// main-agent.ts (흐름)
-const history = loadReadingHistory();       // 1. 메모리 로드
-const prefs = loadPreferences();            // 2. 관심사 로드
-const recommenderOutput = await runRecommender(client, history, prefs);  // 3. 서브 에이전트 호출
-const briefing = await generateBriefing(client, recommenderOutput);      // 4. 브리핑 생성
-```
-
-### Step 5 — Telegram 알림
-
-BotFather로 봇을 만들고, Chat ID를 얻어서 메시지를 전송합니다.
-
-```typescript
-// telegram.ts (핵심)
-await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({ chat_id: chatId, text, parse_mode: "Markdown" }),
-});
-```
-
-### Step 6 — Discussion Agent 구현
-
-이 에이전트가 이 프로젝트의 핵심입니다. 단순한 추천을 넘어, 책의 아이디어를 여러 관점에서 비판적으로 토론하는 경험을 제공합니다.
-
-**설계 철학**: 6개의 페르소나 풀에서 매주 3개를 랜덤하게 선택해 다양한 시각을 유지합니다.
-
-```typescript
-const PERSONAS = [
-  "CTO / 시스템 설계자",
-  "심리학자",
-  "철학자",
-  "스타트업 창업자",
-  "행동경제학자",
-  "Naval Ravikant 스타일 사상가",
-];
-```
-
-Discussion Agent의 출력 구조:
-
-```json
-{
-  "discussion_questions": ["...", "..."],
-  "debate": [
-    { "persona": "철학자", "perspective": "..." },
-    { "persona": "심리학자", "perspective": "..." },
-    { "persona": "Naval 스타일 사상가", "perspective": "..." }
-  ],
-  "key_tensions": ["...", "..."]
-}
-```
-
-**트러블슈팅**: 한국어 토론 텍스트가 풍부해질수록 토큰 한도(1024)를 초과했습니다. Discussion Agent만 `max_tokens: 2048`로 늘려서 해결했습니다.
-
-실제로 생성된 토론 예시 (Thinking in Systems):
-
-```
-[철학자]
-미도우스의 시스템 사고는 결정론적 세계관을 정교하게 포장한 것에 불과하다.
-시스템이 모든 것을 설명한다면, 우리는 윤리적 행위자가 아니라 시스템의 출력물일 뿐이다.
-
-[심리학자]
-지식과 행동 사이의 간극을 메우지 못한다면, 시스템 사고는 지적 유희에 그친다.
-
-[Naval 스타일 사상가]
-레버리지 포인트를 이해하는 자는 시스템을 개혁하려 하지 않고 그것 밖으로 나간다.
-시스템을 고치려는 욕망 자체가 당신이 아직 그 안에 갇혀 있다는 증거다.
-```
-
-### Step 7 — Insight Agent 구현
-
-책의 아이디어를 실생활 도메인에 연결합니다. 저의 경우: 골프, 프리다이빙, 강아지 키우기, 데일리 코디.
-
-```typescript
-// preferences.json에 life_domains 추가
-{
-  "life_domains": ["골프", "프리다이빙", "강아지 키우기", "데일리 코디"]
-}
-```
-
-실제로 생성된 연결 예시 (Thinking, Fast and Slow):
-```
-[골프] 티샷 전 3초간 의도적으로 멈춰 풍향·거리·클럽을 분석 — System 2 작동
-[프리다이빙] 수심 진입 전 '최악의 시나리오 3가지' 심리 시뮬레이션
-[데일리 코디] 상황별 기본 코디 3세트 템플릿으로 결정 피로 제거
-```
-
-### Step 8 — Memory Agent 구현
-
-독서 이력을 분석해 지적 진화를 추적합니다. 이력이 없을 땐 기본값을 반환해 graceful하게 처리합니다.
-
-```typescript
-// 이력이 비어있을 때 API 호출 없이 바로 반환
-if (history.length === 0) return DEFAULT_OUTPUT;
-```
-
-책이 쌓일수록 이런 분석이 가능해집니다:
-```json
-{
-  "themes": ["AI 설계", "인지심리학", "시스템 사고"],
-  "evolution": "기술 중심 독서에서 인간의 사고 구조와 철학으로 관심이 이동하고 있습니다.",
-  "recent_shift": "최근 3개월간 AI 에이전트와 인간 인지의 교차점에 집중하는 경향이 강화됩니다."
-}
-```
-
-### Step 9 — Trend Agent 구현
-
-책을 현재 AI·기술 트렌드와 연결합니다. Haiku 모델로 속도와 비용을 최적화했습니다.
-
-```typescript
-// 트렌드 연결 예시
-{
-  "trend": "AI 의사결정 시스템과 인지편향 완화",
-  "relevance": "카너먼의 이중 프로세싱 이론이 LLM 에이전트 신뢰성 향상의 이론적 기초가 됩니다."
-}
-```
-
-### Step 10 — 병렬 실행 최적화
-
-Recommender가 끝나면 나머지 4개 에이전트를 **동시에** 실행합니다. 순차 실행 대비 약 3배 빠릅니다.
-
-```typescript
-// main-agent.ts — 핵심 최적화
-const [discussion, insights, memory, trends] = await Promise.all([
-  runDiscussion(client, topRec.title, topRec.author, topRec.reason),
-  runInsight(client, topRec.title, topRec.author, prefs),
-  runMemory(client, history),
-  runTrend(client, topRec.title, topRec.author, prefs.interests),
-]);
-```
-
-### Step 11 — Cron 자동화
-
-매주 월요일 아침 8시에 자동 실행되도록 WSL cron을 설정했습니다.
-
-```bash
-0 8 * * 1 /bin/bash -c 'source /home/jooseok/.nvm/nvm.sh && cd /home/jooseok/code/my-ai-agent-v1 && npm start >> /home/jooseok/code/my-ai-agent-v1/logs/cron.log 2>&1'
-```
-
----
-
-## 실제 결과물
-
-매주 월요일 아침 8시, 텔레그램으로 이런 메시지가 도착합니다.
-
-```
-📚 이번 주 독서 브리핑 - 2026-05-16
-
-📌 이번 주 요약
-• 이번 주 핵심 테마는 '시스템 사고'입니다.
-• 심리학과 철학적 관점을 시스템 사고와 연결하면 더 깊은 통찰을 얻을 수 있습니다.
-
-📖 이번 주 추천 책
-Thinking in Systems — Donella H. Meadows
-→ 피드백 루프와 레버리지 포인트를 이해하면 AI 에이전트 설계에 직접 적용 가능
-
-─────────────────────
-🎙 토론 클럽
-
-❓ 토론 질문
-1. AI가 복잡한 시스템에 개입할 때, 레버리지 포인트 식별 행위 자체가 시스템을 변형시키지 않는가?
-2. '자기 조직화'가 맞다면, AI 시스템을 설계한다는 개념 자체가 근본적 오류인가?
-
-🎭 페르소나 토론
-[철학자]
-시스템 사고는 결정론을 정교하게 포장한 것. 인간은 행위자가 아니라 출력물일 뿐인가?
-
-[심리학자]
-지식과 행동 사이의 간극을 메우지 못한다면 시스템 사고는 지적 유희에 그친다.
-
-[Naval 스타일 사상가]
-레버리지 포인트를 이해하는 자는 시스템 밖으로 나간다. 고치려는 욕망 자체가 갇혀 있다는 증거다.
-
-⚡ 핵심 긴장
-• 복잡성을 인정하면서도 의도적 개입이 가능하다는 주장 — 이 둘은 양립하는가?
-• 설계 목표와 실제 최적화 목표의 분리 — AI 정렬 문제의 공백
-
-─────────────────────
-✅ 이번 주 액션 아이템
-• 1~3장 읽고 피드백 루프 개념을 현재 프로젝트에 적용해 노트 정리
-• 시스템 다이어그램 하나 직접 그려보기
-```
-
----
-
-## 실제 독서 이력으로 첫 분석
-
-84권의 독서 이력을 `reading-history.json`에 입력하자, Memory Agent가 처음으로 실제 데이터 기반 분석을 내놓았습니다.
-
-```
-주요 테마
-• 심리학과 자기치유를 통한 내면 성장
-• 철학적 사유와 실존주의적 인생 탐구
-• 기술과 AI에 대한 실용적 이해
-
-지적 진화
-초기의 자존감·관계 개선 자기계발 → 영성·철학으로 깊어짐
-→ 최근 문학·미스터리·AI 기술로 다각화
-
-최근 변화
-2024년 중반 이후 자기계발 중심에서 벗어나 국내외 문학,
-미스터리 추리소설, AI·기술 분야로 독서 범위를 크게 확장
-```
-
-단 84권의 데이터만으로 3년 간의 지적 여정을 한눈에 정리해준다는 게 인상적이었습니다.  
-책이 쌓일수록 이 분석은 점점 더 정밀해집니다.
-
----
-
-## 토론을 실시간 대화로 — 북클럽 AI 봇
-
-처음엔 Discussion Agent가 주간 브리핑에 포함된 일방적 출력이었습니다.  
-하지만 이것은 근본적으로 잘못된 구조였습니다. **토론은 혼자 하는 게 아니니까요.**
-
-그래서 Discussion을 완전히 분리했습니다.
-
-**새로운 플로우:**
-```
-매주 월요일 08:00          → 주간 브리핑 (추천 + 인사이트 + 트렌드)
-책을 다 읽으면 (언제든지)  → 텔레그램에 "다 읽었어" 전송
-                           → 북클럽 AI 봇이 실시간 토론 시작
-```
-
-**실제 대화 예시:**
-```
-나: "Thinking in Systems 다 읽었어!"
-봇: "완독 축하드려요! 📚
-     메도우스는 레버리지 포인트를 '가장 강력한 개입점'이라고 했지만,
-     AI 에이전트가 그 지점을 인간보다 더 정확히 찾는다면,
-     인간의 시스템 사고는 오히려 장애물이 되는 건 아닐까요?"
-
-나: "저는 그보다 피드백 루프 지연이 더 흥미로웠어요"
-봇: "[심리학자 관점] 흥미롭네요. 그런데 지연을 '인식'한다고 해서
-     행동이 달라지지 않는다는 게 수십 년 연구의 결론인데,
-     당신은 이 책을 읽은 후 실제로 무언가를 바꿨나요?"
-
-나: "토론 끝"
-봇: "📝 토론 요약
-     핵심 쟁점: 시스템 인식과 행동 변화의 간극...
-     다음 추천: The Fifth Discipline — 피터 생게"
-```
-
-**구현 핵심:**
-
-봇은 별도 프로세스로 항상 실행 중이며, Telegram Long Polling으로 메시지를 수신합니다.
-
-```typescript
-// 완독 감지 → 토론 시작
-if (detectFinish(text)) {
-  const bookName = extractBook(text);
-  const opening = await manager.startSession(bookName);
-  await send(opening);
-}
-
-// 대화 중이면 Claude에 전달
-if (manager.hasActiveSession()) {
-  const reply = await manager.reply(text);
-  await send(reply);
-}
-```
-
-대화 히스토리는 메모리에 유지되어, Claude가 이전 맥락을 모두 기억한 채 응답합니다.
-
-**봇 실행:**
-```bash
-# WSL 터미널에서
-cd ~/code/my-ai-agent-v1
-npm run bot
-```
-
----
-
-## 배운 점
-
-1. **에이전트 분리의 힘** — 역할이 명확히 나뉘면 디버깅이 쉽고 교체가 자유롭습니다.
-2. **JSON 통신 원칙** — 에이전트 간 자연어를 배제하면 토큰과 파싱 오류가 모두 줄어듭니다.
-3. **모델 선택의 경제학** — 오케스트레이터·토론은 Sonnet, 단순 추천·인사이트는 Haiku.
-4. **작게 시작하라** — MVP로 동작하는 걸 먼저, 전체 스펙은 그 다음.
-5. **병렬 실행의 위력** — `Promise.all`로 4개 에이전트를 동시에 돌리면 속도가 3배 빨라집니다.
-6. **토론의 힘은 페르소나에 있다** — 같은 책도 철학자·심리학자·CTO가 읽으면 전혀 다른 책이 됩니다.
-7. **실생활 연결이 독서를 완성한다** — 책 → 골프 루틴, 책 → 다이빙 심리 훈련으로 이어질 때 지식이 살아납니다.
-8. **토론은 대화여야 한다** — 일방적 출력이 아닌 실시간 주고받음. 설계 원칙이 바뀌면 구조를 과감히 뜯어야 합니다.
-
----
-
-## 다음 단계 (Phase 2)
-
-- [x] **Discussion Agent** — 페르소나 기반 책 토론 시뮬레이션 ✅
-- [x] **Insight Agent** — 독서와 실생활(골프, 프리다이빙 등) 연결 ✅
-- [x] **Memory Agent** — 장기 독서 트렌드 추적 ✅
-- [x] **Trend Agent** — 기술 트렌드와 독서 연결 ✅
+각 에이전트는 독립적으로 동작하면서, Main Agent가 이들을 종합해 **개인화된 주간 리포트**를 만들어줍니다. 삶의 여러 영역을 AI가 조용히 tracking하고, 필요할 때 적절한 질문을 던져주는 구조입니다.
 
 ---
 
 ## 마치며
 
-이 시스템은 완성된 앱이 아닙니다.  
-매일 조금씩 더 나를 알아가는, **살아있는 개인 지식 시스템**입니다.
+I형인 저에게 북클럽은 항상 '하고 싶지만 못 하는 것'이었습니다. 에너지가 없어서, 시간이 안 맞아서, 장소가 멀어서.
 
-관심사가 바뀌면 `preferences.json`을 수정하고,  
-읽은 책이 쌓이면 `reading-history.json`이 두꺼워지고,  
-에이전트가 늘어날수록 브리핑은 더 풍부해집니다.
+이제 텔레그램을 열고 "고래 읽었어"라고 보내면 토론이 시작됩니다. 자정에도, 새벽에도, 지하철에서도. 상대가 피곤하지 않고, 스케줄을 맞출 필요도 없습니다.
 
-> 결국 이 프로젝트의 목표는 단순한 책 추천이 아닙니다.  
-> **나만의 지적 운영체제(Personal Intellectual OS)**를 만드는 것입니다.
+AI를 그냥 검색이나 글쓰기 보조 도구로만 쓰고 있다면, 이런 접근도 있다는 걸 보여드리고 싶었습니다. **일상의 불편함이나 아쉬움을 작은 에이전트 하나로 해소할 수 있다**는 것.
+
+Claude Code는 그 과정에서 설계 파트너였습니다. "이렇게 하면 어때?"를 코드로 바로 확인할 수 있는 속도감이, 실제로 완성까지 이어지게 해준 원동력이었습니다.
+
+다음엔 골프 에이전트를 만들어볼 생각입니다.
 
 ---
 
-*마지막 업데이트: 2026-05-16*  
-*스택: TypeScript · Anthropic SDK · Telegram Bot API · WSL Ubuntu · cron*
+*스택: TypeScript · Node.js · Anthropic SDK · Telegram Bot API · WSL Ubuntu · PM2 · cron · Git*
+*소스코드: `/home/jooseok/code/my-ai-agent-v1`*
+*마지막 업데이트: 2026-05-17*
