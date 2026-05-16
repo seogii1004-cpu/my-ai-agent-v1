@@ -1,0 +1,23 @@
+{
+  "name": "my-ai-agent-v1",
+  "version": "1.0.0",
+  "description": "Personal AI Reading Companion Agent",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "bot": "node dist/bot.js",
+    "dev": "ts-node src/index.ts",
+    "dev:bot": "ts-node src/bot.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.39.0",
+    "axios": "^1.16.1",
+    "dotenv": "^16.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "ts-node": "^10.9.0",
+    "typescript": "^5.0.0"
+  }
+}
