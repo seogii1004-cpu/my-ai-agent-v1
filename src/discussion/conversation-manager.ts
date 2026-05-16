@@ -1,5 +1,9 @@
 import Anthropic from "@anthropic-ai/sdk";
+import fs from "fs";
+import path from "path";
 import { saveSummary } from "./summary-store";
+
+const LAST_READ_FILE = path.resolve(__dirname, "../../memory/last-read.json");
 
 const SYSTEM_PROMPT = `당신은 '북클럽 AI'입니다 — 지적 긴장을 유지하는 독서 토론 파트너입니다.
 
@@ -57,6 +61,11 @@ export class ConversationManager {
   async startSession(book: string): Promise<string> {
     this.waitingForBook = false;
     this.session = { book, messages: [], startedAt: new Date() };
+    fs.writeFileSync(
+      LAST_READ_FILE,
+      JSON.stringify({ lastCompletedAt: new Date().toISOString(), lastBook: book }, null, 2),
+      "utf-8"
+    );
 
     const response = await this.client.messages.create({
       model: "claude-sonnet-4-6",

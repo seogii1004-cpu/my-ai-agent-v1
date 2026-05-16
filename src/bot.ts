@@ -8,7 +8,7 @@ const TOKEN = process.env.TELEGRAM_BOT_TOKEN!;
 const ALLOWED_CHAT_ID = process.env.TELEGRAM_CHAT_ID!;
 
 const FINISH_TRIGGERS = ["다 읽었어", "완독했어", "읽었어", "읽었다", "끝냈어", "다 봤어", "완독"];
-const END_TRIGGERS = ["토론 끝", "그만할게", "끝낼게", "그만", "/end", "/stop"];
+const END_TRIGGERS = ["토론 끝", "토론끝", "그만할게", "끝낼게", "그만", "/end", "/stop"];
 
 interface TelegramUpdate {
   update_id: number;
@@ -34,7 +34,8 @@ function detectFinish(text: string): boolean {
 }
 
 function detectEnd(text: string): boolean {
-  return END_TRIGGERS.some((t) => text.includes(t));
+  const normalized = text.replace(/\s+/g, " ").trim();
+  return END_TRIGGERS.some((t) => normalized.includes(t));
 }
 
 function extractBook(text: string): string {
