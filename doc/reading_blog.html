@@ -237,30 +237,71 @@ def5678 토론 요약: 채식주의자 (2026-05-10)
 <p>Claude Haiku가 관심사(골프, 프리다이빙, 명상 등)에 빗대어 매번 다르게 생성합니다.</p>
 <p><img src="images/nudge.jpg" alt="독서 독촉 알림 — 프리다이빙 비유"></p>
 <hr>
-<h2>구현 과정에서 배운 것들</h2>
-<h3>트러블슈팅: WSL 네트워크 문제</h3>
-<p>가장 시간을 많이 쓴 부분이 여기입니다.</p>
-<p>봇이 텔레그램 메시지를 <strong>받는</strong> 건 됐는데, <strong>보내는</strong> 건 ETIMEDOUT으로 계속 실패했습니다.</p>
-<pre><code>[bot] 수신: &quot;고래 읽었어&quot;
-[bot] 오류: [TypeError: fetch failed] { code: &#39;ETIMEDOUT&#39; }
+<h2>AI 에이전트 개발에서 자주 하는 실수들</h2>
+<p>이 프로젝트를 만들면서 겪은 시행착오입니다. AI를 처음 활용하는 개발자라면 비슷한 함정을 만날 가능성이 높습니다.</p>
+<h3>실수 1. 모델은 &quot;JSON만 반환해&quot;를 잘 안 지킨다</h3>
+<p>에이전트끼리 JSON으로 소통하도록 설계했는데, 모델이 자꾸 이렇게 반환했습니다:</p>
+<pre><code>```json
+{ &quot;recommendations&quot;: [...] }
+```
 </code></pre>
-<p>curl로 테스트하면 잘 되고, Node.js를 직접 실행해도 잘 됩니다. pm2로 띄웠을 때만 안 됩니다.</p>
-<p>원인: WSL2의 IPv6/IPv4 DNS 처리 순서 이슈. Node.js 내장 fetch가 IPv6를 먼저 시도하다 타임아웃.</p>
-<pre><code class="language-bash"># pm2에 플래그 추가
-pm2 start dist/bot.js --node-args=&quot;--dns-result-order=ipv4first&quot;
-
-# + Telegram 호출을 fetch → axios로 교체
+<p><code>JSON.parse()</code>는 당연히 실패합니다. 시스템 프롬프트에 &quot;Respond ONLY with valid JSON, no markdown&quot;이라고 명시해도 빠져나가는 경우가 있었습니다.</p>
+<pre><code class="language-typescript">// 방어 코드를 항상 추가해야 합니다
+const cleaned = text
+  .replace(/^```(?:json)?\s*/i, &quot;&quot;)
+  .replace(/\s*```$/i, &quot;&quot;)
+  .trim();
+return JSON.parse(cleaned);
 </code></pre>
-<p>이런 환경 이슈는 Google 검색으로 답이 잘 안 나옵니다. Claude Code에 현상을 설명하고 같이 원인을 좁혀가면서 해결했습니다.</p>
-<h3>설계 실수: Insight Agent</h3>
-<p>초기 설계에서 Insight Agent는 책의 아이디어를 <strong>골프, 프리다이빙, 강아지 키우기, 데일리 코디</strong>에 연결했습니다.</p>
-<pre><code>[골프] 카너먼의 시스템1/2 이론 → 티샷 전 3초 멈추기
+<p><strong>교훈</strong>: 모델 출력을 그대로 믿지 말고, 파싱 전에 항상 정규화 단계를 넣으세요.</p>
+<hr>
+<h3>실수 2. max_tokens를 너무 작게 잡으면 JSON이 중간에 잘린다</h3>
+<p>한국어 토론 요약을 생성할 때 이런 오류가 났습니다:</p>
+<pre><code>SyntaxError: Unterminated string in JSON at position 1847
+</code></pre>
+<p>JSON이 생성 도중 토큰 한도에 걸려 중간에 잘린 겁니다. <code>max_tokens: 512</code>로 설정했던 에이전트를 <code>2048</code>로 늘려서 해결했습니다.</p>
+<p><strong>교훈</strong>: JSON을 출력하는 에이전트는 예상 출력 길이의 <strong>2배</strong> 이상으로 여유 있게 잡으세요. 잘린 JSON은 파싱 오류로 이어지고, 오류 메시지만 봐선 원인을 파악하기 어렵습니다.</p>
+<hr>
+<h3>실수 3. 잘못된 컨텍스트를 주면 AI는 틀린 방향으로 열심히 일한다</h3>
+<p>Insight Agent가 책의 아이디어를 실생활에 연결하는 역할인데, <code>preferences.json</code>에 이렇게 정의했습니다:</p>
+<pre><code class="language-json">{ &quot;life_domains&quot;: [&quot;골프&quot;, &quot;프리다이빙&quot;, &quot;강아지 키우기&quot;, &quot;데일리 코디&quot;] }
+</code></pre>
+<p>그랬더니 결과물이 이랬습니다:</p>
+<pre><code>[골프]    카너먼의 시스템1/2 이론 → 티샷 전 3초 멈추기
 [프리다이빙] 최악의 시나리오 심리 시뮬레이션
 </code></pre>
-<p>실제로 써보니 어색했습니다. 그것들은 그냥 취미고, 독서는 전혀 다른 목적으로 하고 있었으니까요.</p>
-<p>독서의 실제 목적을 다시 정의했습니다: <strong>삶의 지혜, 경제/재테크, 명상, AI/기술</strong>. 에이전트 프롬프트를 바꾸고 <code>preferences.json</code>을 업데이트했습니다. 변경 범위가 Insight Agent 하나로 제한되는 게 Agent Harness 설계의 장점입니다.</p>
-<h3>모델 선택 원칙</h3>
-<p>비용과 품질의 균형입니다.</p>
+<p>AI는 주어진 컨텍스트대로 &quot;열심히&quot; 연결했지만, 실제로 독서와 골프는 전혀 별개였습니다. 취미가 <code>life_domains</code>에 들어있으니 AI 입장에서는 당연한 결과였던 겁니다.</p>
+<p>preferences를 다시 정의했습니다:</p>
+<pre><code class="language-json">{
+  &quot;reading_interests&quot;: [&quot;삶의 지혜&quot;, &quot;경제/재테크&quot;, &quot;명상&quot;],
+  &quot;professional_interests&quot;: [&quot;AI/LLM&quot;, &quot;시스템 설계&quot;]
+}
+</code></pre>
+<p><strong>교훈</strong>: AI의 출력 품질은 프롬프트보다 <strong>컨텍스트의 정확성</strong>에 달려 있습니다. &quot;AI가 이상한 결과를 냈다&quot;는 생각이 들면, 내가 준 정보가 잘못된 건 아닌지 먼저 의심하세요.</p>
+<hr>
+<h3>실수 4. 설계 단계에서 AI의 특성을 고려하지 않으면 구조를 뜯어야 한다</h3>
+<p>초기 설계에서 Discussion Agent는 주간 브리핑의 일부로 포함됐습니다. 매주 월요일 아침에 &quot;이 책의 토론 포인트&quot;를 자동 생성해서 같이 보내는 방식이었습니다.</p>
+<p>실제로 써보니 즉시 문제가 보였습니다. <strong>토론은 일방적인 출력이 아닙니다.</strong> 질문을 받아야 답하고, 답을 들어야 다음 질문이 나오는 대화입니다. 브리핑에 포함된 &quot;토론 포인트&quot;는 읽고 끝나는 텍스트일 뿐이었습니다.</p>
+<p>결국 Discussion 전체를 분리해서 독립적인 실시간 봇으로 재설계했습니다.</p>
+<pre><code>Before: 브리핑 → 토론 포인트 포함 (일방적 출력)
+After:  브리핑 → 추천만 / 봇 → 완독 감지 후 실시간 대화
+</code></pre>
+<p><strong>교훈</strong>: AI의 강점은 &quot;생성&quot;이 아니라 &quot;대화&quot;에 있습니다. 기능을 설계할 때 AI와 사용자가 주고받는 구조인지, 아니면 일방적 출력인지를 먼저 정의하세요. 나중에 바꾸면 구조 전체를 뜯어야 합니다.</p>
+<hr>
+<h3>실수 5. 환경 이슈 — WSL에서 pm2로 띄우면 네트워크가 안 된다</h3>
+<p>봇이 텔레그램 메시지를 <strong>받는</strong> 건 되는데, <strong>응답을 보내는</strong> 건 ETIMEDOUT으로 계속 실패했습니다.</p>
+<pre><code>[bot] 수신: &quot;고래 읽었어&quot;
+[bot] 오류: TypeError: fetch failed { code: &#39;ETIMEDOUT&#39; }
+</code></pre>
+<p>curl로 테스트하면 되고, Node.js 직접 실행해도 됩니다. pm2로 띄웠을 때만 안 됩니다. 구글 검색으로는 답이 잘 안 나오는 유형입니다.</p>
+<p>원인: WSL2의 IPv6/IPv4 DNS 처리 순서 이슈. Node.js 내장 fetch가 IPv6를 먼저 시도하다 타임아웃.</p>
+<pre><code class="language-bash"># 두 가지를 같이 적용해서 해결
+pm2 start dist/bot.js --node-args=&quot;--dns-result-order=ipv4first&quot;
+# + fetch → axios 교체
+</code></pre>
+<p><strong>교훈</strong>: 환경 이슈는 재현 조건이 좁을수록 원인 파악이 어렵습니다. &quot;되는 환경 vs 안 되는 환경&quot;을 체계적으로 좁혀가는 게 핵심입니다. Claude Code에 현상을 설명하고 같이 범위를 좁혀가며 해결했습니다.</p>
+<hr>
+<h3>참고: 모델 선택 원칙</h3>
 <table>
 <thead>
 <tr>
@@ -270,9 +311,9 @@ pm2 start dist/bot.js --node-args=&quot;--dns-result-order=ipv4first&quot;
 </tr>
 </thead>
 <tbody><tr>
-<td>오케스트레이터, 토론</td>
+<td>오케스트레이터, 토론 봇</td>
 <td>claude-sonnet-4-6</td>
-<td>풍부한 맥락 이해, 한국어 품질</td>
+<td>맥락 이해, 한국어 품질</td>
 </tr>
 <tr>
 <td>추천, 인사이트, 트렌드</td>
@@ -280,7 +321,7 @@ pm2 start dist/bot.js --node-args=&quot;--dns-result-order=ipv4first&quot;
 <td>빠름, 구조화 작업에 충분</td>
 </tr>
 </tbody></table>
-<p>추천 결과나 JSON 변환처럼 형식이 정해진 작업은 Haiku로 충분합니다. 실제로 대화하는 토론 봇만 Sonnet을 씁니다.</p>
+<p>JSON 변환이나 추천처럼 형식이 정해진 작업은 Haiku로 충분합니다. 실시간 대화처럼 품질이 중요한 곳에만 Sonnet을 씁니다.</p>
 <hr>
 <h2>프로젝트 구조</h2>
 <pre><code>my-ai-agent-v1/
