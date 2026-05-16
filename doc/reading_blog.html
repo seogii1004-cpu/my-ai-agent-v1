@@ -84,33 +84,26 @@
 <blockquote>
 <p><em>&quot;AI가 내 독서 파트너가 되면 어떨까? 언제든, 어디서든, 피곤하지 않게.&quot;</em></p>
 </blockquote>
-<p>SW 엔지니어라는 직업 덕분에 그 생각을 바로 코드로 옮길 수 있었습니다. 그리고 그 과정에서 Claude Code라는 도구를 적극 활용했습니다. 이 글은 그 구축 과정을 동료 개발자들과 나누기 위해 씁니다. <strong>AI를 이렇게도 쓸 수 있다</strong>는 걸 보여드리고 싶어서요.</p>
-<hr>
-<h2>도구: Claude Code란?</h2>
-<p>Claude Code는 Anthropic이 만든 <strong>CLI 기반 AI 코딩 도구</strong>입니다. IDE 플러그인이 아닌 터미널에서 돌아가며, 단순한 코드 자동완성을 넘어 <strong>대화하면서 함께 시스템을 설계하고 구현</strong>할 수 있습니다.</p>
-<p>이 프로젝트에서 Claude Code는 단순한 코파일럿이 아니었습니다. 아이디어 → 설계 → 구현 → 디버깅 → 리팩토링까지 전 과정을 같이 했습니다. 코드를 받아쓰는 게 아니라, <strong>무엇을 만들지 대화로 정의하고, Claude Code가 그걸 코드로 구현하는 방식</strong>으로 진행했습니다.</p>
-<pre><code class="language-bash"># 실제로 이런 식으로 대화하며 개발했습니다
-&quot;Discussion은 주간 브리핑에 포함하는 게 아니라
- 책 다 읽었을 때 실시간 대화로 시작되면 좋겠어.
- 텔레그램에서 메시지 주고받는 방식으로.&quot;
-
-→ Claude Code가 ConversationManager 설계부터 bot.ts 구현까지 진행
-</code></pre>
+<p>SW 엔지니어라는 직업 덕분에 그 생각을 바로 코드로 옮길 수 있었습니다. 도구는 Anthropic의 Claude Code — CLI에서 대화하듯 설계하고 구현하는 AI 코딩 도구입니다. 이 글은 그 구축 과정을 동료 개발자들과 나누기 위해 씁니다. <strong>AI를 이렇게도 쓸 수 있다</strong>는 걸 보여드리고 싶어서요.</p>
 <hr>
 <h2>설계 철학: Agent Harness</h2>
 <p>이 프로젝트의 핵심 개념은 <strong>Agent Harness</strong>입니다.</p>
-<p>하나의 거대한 AI 프롬프트로 모든 걸 처리하는 대신, <strong>역할이 명확히 분리된 여러 에이전트를 Main Agent가 조율하는 구조</strong>입니다.</p>
-<pre><code>Main Agent (오케스트레이터 - claude-sonnet-4-6)
+<p>하나의 거대한 AI 프롬프트로 모든 걸 처리하는 대신, <strong>하나의 Main Agent가 여러 Sub Agent를 조율하는 구조</strong>입니다. Main Agent는 오케스트레이터 역할만 하고, 실제 일은 각자 전문화된 Sub Agent가 처리합니다.</p>
+<p>큰 그림은 이렇습니다. <strong>독서 에이전트는 그 첫 번째</strong>입니다.</p>
+<pre><code>Main Agent (오케스트레이터)
     │
-    ├── Recommender Agent    ← 이번 주 책 추천
-    ├── Insight Agent        ← 책 → 삶의 지혜 연결
-    ├── Memory Agent         ← 독서 이력 분석
-    └── Trend Agent          ← AI/기술 트렌드 연결
-
-+ 독립 실행
-    └── 북클럽 봇 (24시간)  ← 실시간 독서 토론
+    ├── 📚 독서 Agent     ← Agent #1 (현재 구현)
+    │       ├── Recommender   ← 이번 주 책 추천
+    │       ├── Insight       ← 책 → 삶의 지혜 연결
+    │       ├── Memory        ← 독서 이력 분석
+    │       └── Trend         ← AI/기술 트렌드 연결
+    │
+    ├── ⛳ 골프 Agent     ← Agent #2 (예정)
+    ├── 🤿 건강 Agent     ← Agent #3 (예정)
+    └── 💰 재테크 Agent   ← Agent #4 (예정)
 </code></pre>
-<p>각 에이전트는 <strong>JSON으로만 소통</strong>합니다. 자연어를 배제하면 파싱 오류가 사라지고, 에이전트 교체가 인터페이스 변경 없이 가능합니다.</p>
+<p>삶의 여러 영역에 에이전트를 하나씩 붙여가는 방식입니다. 에이전트가 늘어날수록 Main Agent가 종합하는 주간 리포트도 풍부해집니다. 이 글에서 다루는 건 그 첫 번째 — 독서 에이전트입니다.</p>
+<p>각 Sub Agent는 <strong>JSON으로만 소통</strong>합니다. 자연어를 배제하면 파싱 오류가 사라지고, 에이전트 교체가 인터페이스 변경 없이 가능합니다.</p>
 <pre><code class="language-typescript">// types.ts — 에이전트 간 공유 계약
 export interface InsightOutput {
   book: string;
@@ -162,7 +155,7 @@ const [insights, memory, trends] = await Promise.all([
      그렇다면 질문: 욕망을 억누르는 삶과 욕망에 충실한 삶 —
      당신은 어느 쪽이 더 진실하다고 생각하나요?
 </code></pre>
-<p>대화를 주고받습니다. Claude는 소크라테스식으로, 바로 동의하지 않고 계속 질문을 던집니다.</p>
+<p>대화를 주고받습니다. 봇은 소크라테스식으로, 바로 동의하지 않고 계속 질문을 던집니다.</p>
 <p><img src="images/discussion.jpg" alt="고래 토론 실제 대화"></p>
 <pre><code>나:  &quot;욕망을 억압한 세계를 고발하는 것 같아.
      다들 자기에 충실하지만 비극적인 결과를 낳잖아.&quot;
@@ -180,6 +173,38 @@ const [insights, memory, trends] = await Promise.all([
      💡 새로운 시각: 욕망과 책임은 분리 불가능하다
      📚 다음 추천: 『채식주의자』— 한강 (억압과 해방의 또 다른 언어)
 </code></pre>
+<h4>토론 파트너의 정체 — 다중 페르소나</h4>
+<p>봇이 단순히 &quot;AI처럼&quot; 대답하지 않는 이유가 있습니다. 내부적으로 <strong>4가지 전문가 페르소나</strong>를 동시에 탑재하고, 대화 맥락에 따라 자연스럽게 전환합니다.</p>
+<table>
+<thead>
+<tr>
+<th>페르소나</th>
+<th>관점</th>
+<th>특징</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>🧠 심리학자</td>
+<td>인간의 동기와 내면</td>
+<td>&quot;그 선택의 무의식적 이유는 뭘까요?&quot;</td>
+</tr>
+<tr>
+<td>🏛️ 철학자</td>
+<td>존재·윤리·구조적 사유</td>
+<td>&quot;그 전제 자체가 맞는 건가요?&quot;</td>
+</tr>
+<tr>
+<td>⚙️ 엔지니어</td>
+<td>시스템·인과·실용성</td>
+<td>&quot;그게 실제로 작동하는 메커니즘은?&quot;</td>
+</tr>
+<tr>
+<td>💼 사업가</td>
+<td>가치·선택·실행</td>
+<td>&quot;그래서 당신은 뭘 다르게 할 건가요?&quot;</td>
+</tr>
+</tbody></table>
+<p>같은 책도 어떤 페르소나가 질문하느냐에 따라 토론의 방향이 완전히 달라집니다. 철학자는 전제를 흔들고, 심리학자는 감정을 파고들고, 엔지니어는 구조를 묻고, 사업가는 행동을 촉구합니다. 혼자 읽었다면 절대 닿지 못했을 각도에서 책을 다시 보게 됩니다.</p>
 <p>토론이 끝나면 요약이 자동으로 <strong>파일로 저장되고 git commit</strong>됩니다.</p>
 <pre><code class="language-bash">$ git log --oneline
 abc1234 토론 요약: 고래 (2026-05-17)
@@ -266,23 +291,30 @@ pm2 start dist/bot.js --node-args=&quot;--dns-result-order=ipv4first&quot;
     └── reading_blog.md             ← 이 글
 </code></pre>
 <hr>
-<h2>앞으로: 더 많은 에이전트들</h2>
-<p>지금 만든 건 <strong>독서 에이전트</strong>입니다. 하지만 이 Harness 구조는 어떤 도메인에도 적용할 수 있습니다.</p>
-<pre><code>Main Agent
-    │
-    ├── 독서 Agent (✅ 완성)
-    │       └── 주간 추천 + 실시간 토론 + 독촉 알림
-    │
-    ├── 골프 Agent (예정)
-    │       └── 라운드 기록 분석 + 약점 드릴 추천
-    │
-    ├── 건강 Agent (예정)
-    │       └── 프리다이빙 훈련 사이클 + 컨디션 관리
-    │
-    └── 재테크 Agent (예정)
-            └── 시장 뉴스 요약 + 포트폴리오 점검 알림
-</code></pre>
-<p>각 에이전트는 독립적으로 동작하면서, Main Agent가 이들을 종합해 <strong>개인화된 주간 리포트</strong>를 만들어줍니다. 삶의 여러 영역을 AI가 조용히 tracking하고, 필요할 때 적절한 질문을 던져주는 구조입니다.</p>
+<h2>앞으로: Agent #2, #3, #4...</h2>
+<p>독서 에이전트를 만들면서 확신이 생겼습니다. <strong>이 구조는 어떤 삶의 영역에도 붙일 수 있다</strong>는 것.</p>
+<p>다음 에이전트는 이미 구상 중입니다.</p>
+<table>
+<thead>
+<tr>
+<th>Agent</th>
+<th>하는 일</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>⛳ 골프 Agent</td>
+<td>라운드 기록 분석, 약점 패턴 감지, 주간 드릴 추천</td>
+</tr>
+<tr>
+<td>🤿 건강 Agent</td>
+<td>프리다이빙 훈련 사이클 설계, 컨디션 기반 조언</td>
+</tr>
+<tr>
+<td>💰 재테크 Agent</td>
+<td>시장 뉴스 요약, 포트폴리오 점검 알림</td>
+</tr>
+</tbody></table>
+<p>에이전트가 늘어날수록 Main Agent가 이들을 종합해 <strong>삶 전체를 조망하는 주간 리포트</strong>가 됩니다. 각 영역을 AI가 조용히 tracking하고, 필요할 때 적절한 질문을 던져주는 개인 AI 시스템입니다.</p>
 <hr>
 <h2>마치며</h2>
 <p>I형인 저에게 북클럽은 항상 &#39;하고 싶지만 못 하는 것&#39;이었습니다. 에너지가 없어서, 시간이 안 맞아서, 장소가 멀어서.</p>
