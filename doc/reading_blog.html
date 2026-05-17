@@ -30,7 +30,7 @@
     pre {
       background: #f6f8fa;
       color: #24292e;
-      border: 1px solid #d0d7de;
+      border: none;
       padding: 20px 24px;
       border-radius: 8px;
       overflow-x: auto;
@@ -41,6 +41,13 @@
     code {
       font-family: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
       color: #24292e;
+    }
+    pre code {
+      border: none !important;
+      background: none !important;
+      padding: 0 !important;
+      color: inherit !important;
+      font-size: inherit !important;
     }
     p code, li code {
       background: #f6f8fa;
