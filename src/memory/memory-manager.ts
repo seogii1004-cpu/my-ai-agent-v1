@@ -48,20 +48,34 @@ export function loadCurrentlyReading(): CurrentlyReading | null {
   return JSON.parse(fs.readFileSync(filePath, "utf-8"));
 }
 
-export function saveBookRating(book: string, rating: number): void {
+export function saveBookRatingWithResult(book: string, rating: number): { reading_days?: number } {
   const history = loadReadingHistory();
+  const completed_at = new Date().toISOString().split("T")[0];
+
+  const currently = loadCurrentlyReading();
+  const started_at = currently?.book === book ? currently.startedAt.split("T")[0] : undefined;
+  const reading_days = started_at
+    ? Math.max(1, Math.round((Date.now() - new Date(currently!.startedAt).getTime()) / 86400000))
+    : undefined;
+
   const existing = history.find((r) => r.book === book);
   if (existing) {
     existing.rating = rating;
+    if (started_at) existing.started_at = started_at;
+    if (reading_days) existing.reading_days = reading_days;
+    existing.completed_at = completed_at;
   } else {
     history.push({
       book,
       author: "",
       rating,
-      completed_at: new Date().toISOString().split("T")[0],
+      started_at,
+      completed_at,
+      reading_days,
       topics: [],
       key_insights: [],
     });
   }
   saveReadingHistory(history);
+  return { reading_days };
 }

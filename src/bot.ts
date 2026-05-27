@@ -2,7 +2,7 @@ import "dotenv/config";
 import Anthropic from "@anthropic-ai/sdk";
 import axios from "axios";
 import { ConversationManager } from "./discussion/conversation-manager";
-import { saveCurrentlyReading, saveBookRating } from "./memory/memory-manager";
+import { saveCurrentlyReading, saveBookRatingWithResult } from "./memory/memory-manager";
 
 const TELEGRAM_API = "https://api.telegram.org";
 const TOKEN = process.env.TELEGRAM_BOT_TOKEN!;
@@ -91,9 +91,10 @@ async function handleMessage(text: string): Promise<void> {
       const rating = parseRating(text);
       if (rating) {
         const stars = "⭐".repeat(rating);
-        saveBookRating(waitingForRating, rating);
+        const { reading_days } = saveBookRatingWithResult(waitingForRating, rating);
         waitingForRating = null;
-        await send(`${stars} *${rating}점* 저장했어요\\! 다음 책도 기대할게요 📚`);
+        const daysMsg = reading_days ? ` \\(${reading_days}일 동안 읽으셨네요\\)` : "";
+        await send(`${stars} *${rating}점* 저장했어요\\!${daysMsg} 다음 책도 기대할게요 📚`);
       } else {
         await send("1\\~5 사이 숫자로 입력해주세요.");
       }
@@ -106,7 +107,7 @@ async function handleMessage(text: string): Promise<void> {
       if (bookName) {
         waitingForStartBook = false;
         saveCurrentlyReading(bookName);
-        await send(`📖 *${bookName}* 시작! 다 읽으면 알려주세요 😊`);
+        await send(`📖 *${bookName}* 을\\(를\\) 읽기 시작했습니다\\!\n다 읽으셨으면 _"${bookName} 다 읽었어"_ 라고 알려주세요 😊`);
       }
       return;
     }
@@ -120,7 +121,7 @@ async function handleMessage(text: string): Promise<void> {
         return;
       }
       saveCurrentlyReading(bookName);
-      await send(`📖 *${bookName}* 시작! 다 읽으면 알려주세요 😊`);
+      await send(`📖 *${bookName}* 을\\(를\\) 읽기 시작했습니다\\!\n다 읽으셨으면 _"${bookName} 다 읽었어"_ 라고 알려주세요 😊`);
       return;
     }
 

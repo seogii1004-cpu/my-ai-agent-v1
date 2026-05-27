@@ -2,7 +2,9 @@ export interface BookRecord {
   book: string;
   author: string;
   rating: number;
+  started_at?: string;
   completed_at: string;
+  reading_days?: number;
   topics: string[];
   key_insights: string[];
 }
