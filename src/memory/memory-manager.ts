@@ -47,3 +47,21 @@ export function loadCurrentlyReading(): CurrentlyReading | null {
   if (!fs.existsSync(filePath)) return null;
   return JSON.parse(fs.readFileSync(filePath, "utf-8"));
 }
+
+export function saveBookRating(book: string, rating: number): void {
+  const history = loadReadingHistory();
+  const existing = history.find((r) => r.book === book);
+  if (existing) {
+    existing.rating = rating;
+  } else {
+    history.push({
+      book,
+      author: "",
+      rating,
+      completed_at: new Date().toISOString().split("T")[0],
+      topics: [],
+      key_insights: [],
+    });
+  }
+  saveReadingHistory(history);
+}

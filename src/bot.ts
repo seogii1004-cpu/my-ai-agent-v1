@@ -2,7 +2,7 @@ import "dotenv/config";
 import Anthropic from "@anthropic-ai/sdk";
 import axios from "axios";
 import { ConversationManager } from "./discussion/conversation-manager";
-import { saveCurrentlyReading } from "./memory/memory-manager";
+import { saveCurrentlyReading, saveBookRating } from "./memory/memory-manager";
 
 const TELEGRAM_API = "https://api.telegram.org";
 const TOKEN = process.env.TELEGRAM_BOT_TOKEN!;
@@ -23,6 +23,8 @@ interface TelegramUpdate {
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const manager = new ConversationManager(client);
 let waitingForStartBook = false;
+let waitingForRating: string | null = null; // 별점 대기 중인 책 제목
+let currentBookName: string | null = null;
 
 async function send(text: string): Promise<void> {
   await axios.post(
@@ -53,6 +55,11 @@ function extractBook(text: string): string {
   return cleaned.replace(/[!?.,~:]/g, "").trim();
 }
 
+function parseRating(text: string): number | null {
+  const match = text.match(/[1-5]/);
+  return match ? parseInt(match[0]) : null;
+}
+
 function extractStartBook(text: string): string {
   let cleaned = text;
   for (const trigger of [...START_TRIGGERS].sort((a, b) => b.length - a.length)) {
@@ -69,8 +76,26 @@ async function handleMessage(text: string): Promise<void> {
         await send("토론을 정리할게요... 잠깐만요 🤔");
         const summary = await manager.endSession();
         await send(summary);
+        if (currentBookName) {
+          waitingForRating = currentBookName;
+          await send(`⭐ *${currentBookName}* 별점을 남겨주세요\\! (1\\~5점)`);
+        }
       } else {
         await send("진행 중인 토론이 없어요.");
+      }
+      return;
+    }
+
+    // 1-1. 별점 입력 대기 중
+    if (waitingForRating) {
+      const rating = parseRating(text);
+      if (rating) {
+        const stars = "⭐".repeat(rating);
+        saveBookRating(waitingForRating, rating);
+        waitingForRating = null;
+        await send(`${stars} *${rating}점* 저장했어요\\! 다음 책도 기대할게요 📚`);
+      } else {
+        await send("1\\~5 사이 숫자로 입력해주세요.");
       }
       return;
     }
@@ -104,6 +129,7 @@ async function handleMessage(text: string): Promise<void> {
       const bookName = text.replace(/[!?.,~:]/g, "").trim();
       if (bookName) {
         await send("토론 시작할게요... 🎙");
+        currentBookName = bookName;
         const opening = await manager.startSession(bookName);
         await send(opening);
       }
@@ -119,6 +145,7 @@ async function handleMessage(text: string): Promise<void> {
         return;
       }
       await send("토론 시작할게요... 🎙");
+      currentBookName = bookName;
       const opening = await manager.startSession(bookName);
       await send(opening);
       return;
