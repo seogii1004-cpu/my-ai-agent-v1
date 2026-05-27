@@ -23,8 +23,9 @@ interface TelegramUpdate {
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const manager = new ConversationManager(client);
 let waitingForStartBook = false;
-let waitingForRating: string | null = null; // 별점 대기 중인 책 제목
+let waitingForRating: string | null = null;
 let currentBookName: string | null = null;
+let bookSelectionList: string[] = [];
 
 async function send(text: string): Promise<void> {
   await axios.post(
@@ -152,7 +153,49 @@ async function handleMessage(text: string): Promise<void> {
       return;
     }
 
-    // 6. 별점 목록 조회
+    // 6. 책 목록 조회
+    if (text.trim() === "/책목록") {
+      const history = loadReadingHistory();
+      if (history.length === 0) {
+        await send("읽은 책이 없어요\\.");
+        return;
+      }
+      const sorted = [...history].sort((a, b) => (b.rating || 0) - (a.rating || 0));
+      bookSelectionList = sorted.map((b) => b.book);
+      const lines = sorted.map((b, i) => {
+        const stars = b.rating ? "  " + "⭐".repeat(b.rating) : "";
+        return `${i + 1}\\. ${b.book}${stars}`;
+      });
+      const msg =
+        `📚 *읽은 책 목록 \\(${history.length}권\\)*\n\n` +
+        lines.join("\n") +
+        "\n\n번호 또는 제목을 입력하면 토론을 시작할게요\\!";
+      await send(msg);
+      return;
+    }
+
+    // 6-1. 책 선택 후 토론 시작
+    if (bookSelectionList.length > 0) {
+      const num = parseInt(text.trim());
+      let bookName: string | null = null;
+      if (!isNaN(num) && num >= 1 && num <= bookSelectionList.length) {
+        bookName = bookSelectionList[num - 1];
+      } else {
+        bookName = bookSelectionList.find((b) => b.includes(text.trim()) || text.trim().includes(b)) ?? null;
+      }
+      if (bookName) {
+        bookSelectionList = [];
+        await send("토론 시작할게요\\.\\.\\. 🎙");
+        currentBookName = bookName;
+        const opening = await manager.startSession(bookName);
+        await send(opening);
+      } else {
+        await send("번호 또는 제목을 다시 입력해주세요\\.");
+      }
+      return;
+    }
+
+    // 7. 별점 목록 조회
     if (text.trim() === "/별점") {
       const history = loadReadingHistory();
       const rated = history.filter((b) => b.rating > 0).sort((a, b) => b.rating - a.rating);
@@ -196,7 +239,9 @@ async function handleMessage(text: string): Promise<void> {
         "토론 종료:\n" +
         '→ _"토론 끝"_ 또는 _"/end"_\n\n' +
         "별점 목록:\n" +
-        '→ _"/별점"_'
+        '→ _"/별점"_\n\n' +
+        "읽은 책 목록 \\& 토론:\n" +
+        '→ _"/책목록"_ → 번호 입력'
     );
   } catch (err) {
     console.error("[bot] handleMessage 오류:", err);
