@@ -2,7 +2,7 @@ import "dotenv/config";
 import Anthropic from "@anthropic-ai/sdk";
 import axios from "axios";
 import { ConversationManager } from "./discussion/conversation-manager";
-import { saveCurrentlyReading, saveBookRatingWithResult } from "./memory/memory-manager";
+import { saveCurrentlyReading, saveBookRatingWithResult, loadReadingHistory } from "./memory/memory-manager";
 
 const TELEGRAM_API = "https://api.telegram.org";
 const TOKEN = process.env.TELEGRAM_BOT_TOKEN!;
@@ -152,7 +152,34 @@ async function handleMessage(text: string): Promise<void> {
       return;
     }
 
-    // 6. 토론 진행 중
+    // 6. 별점 목록 조회
+    if (text.trim() === "/별점") {
+      const history = loadReadingHistory();
+      const rated = history.filter((b) => b.rating > 0).sort((a, b) => b.rating - a.rating);
+      const unrated = history.filter((b) => !b.rating);
+
+      if (rated.length === 0) {
+        await send("아직 별점을 입력한 책이 없어요\\. 토론 후 별점을 남겨보세요\\! ⭐");
+        return;
+      }
+
+      const lines = rated.map((b) => {
+        const stars = "⭐".repeat(b.rating);
+        const days = b.reading_days ? ` \\[${b.reading_days}일\\]` : "";
+        return `${stars}${days}  ${b.book}`;
+      });
+
+      const msg =
+        `📚 *별점 순 독서 목록*\n` +
+        `_총 ${history.length}권 중 ${rated.length}권 평가됨_\n\n` +
+        lines.join("\n") +
+        (unrated.length > 0 ? `\n\n_\\(미평가 ${unrated.length}권\\)_` : "");
+
+      await send(msg);
+      return;
+    }
+
+    // 7. 토론 진행 중
     if (manager.hasActiveSession()) {
       const reply = await manager.reply(text);
       await send(reply);
@@ -167,7 +194,9 @@ async function handleMessage(text: string): Promise<void> {
         "책 완독:\n" +
         "→ _\"[책 제목] 읽었어\"_ 또는 _\"다 읽었어 [책 제목]\"_\n\n" +
         "토론 종료:\n" +
-        '→ _"토론 끝"_ 또는 _"/end"_'
+        '→ _"토론 끝"_ 또는 _"/end"_\n\n' +
+        "별점 목록:\n" +
+        '→ _"/별점"_'
     );
   } catch (err) {
     console.error("[bot] handleMessage 오류:", err);
